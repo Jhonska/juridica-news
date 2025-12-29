@@ -4,8 +4,6 @@ buildCommand = "npm run install:all && npm run build"
 
 [deploy]
 startCommand = "npm start"
-restartPolicyType = "on-failure"
-restartPolicyMaxRetries = 3
 
 [[services]]
 name = "juridica-news"
@@ -13,7 +11,9 @@ name = "juridica-news"
 [[services.volumes]]
 mountPath = "/app/backend/storage"
 name = "juridica-storage"
+size = "1Gi"
 
 [[services.volumes]]
 mountPath = "/app/backend/prisma"
 name = "juridica-database"
+size = "1Gi"
