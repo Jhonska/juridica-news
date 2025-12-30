@@ -194,11 +194,10 @@ app.use('/api/admin', authMiddleware, adminRoutes); // FUNCIÓN TEMPORAL - Solo 
 // Static files serving
 app.use('/uploads', express.static(process.env.UPLOAD_DIR || './uploads'));
 
-// Servir documentos descargados (DOCX, RTF) desde storage/documents
-app.use('/api/storage/documents', express.static(path.join(__dirname, '../storage/documents')));
-
-// Image files are now served via programmatic endpoint in storage.ts
-// for better error handling, logging, and cache control
+// ✅ FIXED: Removed static file serving for /api/storage/documents
+// The storage routes (registered at line 145) already handle all /api/storage/* endpoints
+// including both static document downloads and PDF conversion endpoints
+// Previously this was interfering with the PDF conversion endpoint
 
 // Servir frontend estático en producción
 if (process.env.NODE_ENV === 'production') {
