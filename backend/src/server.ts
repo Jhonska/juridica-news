@@ -123,8 +123,8 @@ app.use(morgan('combined', {
     return noisyPaths.some(path => req.url.startsWith(path));
   }
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(requestLogger);
 app.use(limiter);
 
