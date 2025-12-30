@@ -336,13 +336,132 @@ router.get('/system-info', async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    logger.error('Error retrieving system info', { 
+    logger.error('Error retrieving system info', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user.id 
+      userId: req.user.id
     });
 
     return res.status(500).json({
       error: 'Failed to retrieve system information',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/populate-portal-sections:
+ *   post:
+ *     summary: Populate portal sections for published articles (TEMPORAL)
+ *     description: Updates published articles with section flags (isGeneral, isUltimasNoticias, etc). TEMPORARY FUNCTION.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Portal sections populated successfully
+ *       403:
+ *         description: Access denied
+ */
+router.post('/populate-portal-sections', async (req: Request, res: Response) => {
+  try {
+    // Verificar permisos de administrador
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'Only administrators can populate portal sections'
+      });
+    }
+
+    logger.info('🔄 Starting portal sections population...');
+
+    // Obtener todos los artículos publicados
+    const articles = await prisma.article.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: { publishedAt: 'desc' }
+    });
+
+    logger.info(`📊 Found ${articles.length} published articles`);
+
+    if (articles.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No published articles to populate',
+        statistics: {
+          generalCount: 0,
+          ultimasNoticiasCount: 0,
+          destacadosSemanaCount: 0
+        }
+      });
+    }
+
+    const stats = {
+      generalCount: 0,
+      ultimasNoticiasCount: 0,
+      destacadosSemanaCount: 0
+    };
+
+    // Actualizar primeros 6 artículos para sección General (posiciones 1-6)
+    const generalCount = Math.min(6, articles.length);
+    for (let i = 0; i < generalCount; i++) {
+      await prisma.article.update({
+        where: { id: articles[i].id },
+        data: {
+          isGeneral: true,
+          posicionGeneral: i + 1
+        }
+      });
+      stats.generalCount++;
+      logger.info(`✅ Article set as General (position ${i + 1})`);
+    }
+
+    // Actualizar siguientes artículos para Últimas Noticias (máximo 5)
+    const ultimasCount = Math.min(5, Math.max(0, articles.length - 6));
+    for (let i = 0; i < ultimasCount; i++) {
+      const articleIndex = 6 + i;
+      await prisma.article.update({
+        where: { id: articles[articleIndex].id },
+        data: {
+          isUltimasNoticias: true,
+          posicionUltimasNoticias: i + 1
+        }
+      });
+      stats.ultimasNoticiasCount++;
+      logger.info(`✅ Article set as Últimas Noticias (position ${i + 1})`);
+    }
+
+    // Actualizar siguientes artículos para Destacado de la Semana (máximo 4)
+    const destacadosCount = Math.min(4, Math.max(0, articles.length - 6 - 5));
+    for (let i = 0; i < destacadosCount; i++) {
+      const articleIndex = 6 + 5 + i;
+      await prisma.article.update({
+        where: { id: articles[articleIndex].id },
+        data: {
+          isDestacadoSemana: true
+        }
+      });
+      stats.destacadosSemanaCount++;
+      logger.info(`✅ Article set as Destacado Semana`);
+    }
+
+    logger.info('✅ Portal sections populated successfully!', { statistics: stats });
+
+    return res.json({
+      success: true,
+      message: 'Portal sections populated successfully',
+      statistics: stats,
+      timestamp: new Date().toISOString(),
+      warning: 'This is a temporary development function - remove after use'
+    });
+
+  } catch (error) {
+    logger.error('❌ Error populating portal sections', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user.id
+    });
+
+    return res.status(500).json({
+      error: 'Failed to populate portal sections',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
