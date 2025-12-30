@@ -8,31 +8,60 @@ import { promisify } from 'util';
 const router = Router();
 const gunzip = promisify(zlib.gunzip);
 
-// Upload compressed database file
-router.post('/upload-database', authMiddleware, async (req, res) => {
+// Upload compressed database file in chunks
+router.post('/upload-database-chunk', authMiddleware, async (req, res) => {
   try {
-    const { compressedData, filename } = req.body;
+    const { compressedChunk, chunkIndex, totalChunks, filename } = req.body;
 
-    console.log(`[MIGRATION] Receiving ${filename}...`);
+    const tempDir = path.join(process.cwd(), '.migration-temp');
+    fs.mkdirSync(tempDir, { recursive: true });
 
-    // Decode base64 and decompress
-    const compressedBuffer = Buffer.from(compressedData, 'base64');
-    console.log(`[MIGRATION] Compressed size: ${(compressedBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[MIGRATION] Receiving chunk ${chunkIndex + 1}/${totalChunks} for ${filename}`);
 
-    const decompressed = await gunzip(compressedBuffer);
-    console.log(`[MIGRATION] Decompressed size: ${(decompressed.length / 1024 / 1024).toFixed(2)} MB`);
+    // Decode base64 and save chunk
+    const chunkBuffer = Buffer.from(compressedChunk, 'base64');
+    const chunkPath = path.join(tempDir, `${filename}.chunk.${chunkIndex}`);
+    fs.writeFileSync(chunkPath, chunkBuffer);
 
-    // Write to database location
-    const dbPath = path.join(process.cwd(), 'prisma', 'dev.db');
-    fs.writeFileSync(dbPath, decompressed);
+    console.log(`[MIGRATION] Chunk ${chunkIndex + 1} saved (${(chunkBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
 
-    console.log(`[MIGRATION] ✅ Database written to ${dbPath}`);
+    // If last chunk, combine all and decompress
+    if (chunkIndex === totalChunks - 1) {
+      console.log(`[MIGRATION] Last chunk received, combining and decompressing...`);
+
+      const chunks = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const data = fs.readFileSync(path.join(tempDir, `${filename}.chunk.${i}`));
+        chunks.push(data);
+      }
+
+      const compressedBuffer = Buffer.concat(chunks);
+      console.log(`[MIGRATION] Total compressed size: ${(compressedBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+
+      const decompressed = await gunzip(compressedBuffer);
+      console.log(`[MIGRATION] Decompressed size: ${(decompressed.length / 1024 / 1024).toFixed(2)} MB`);
+
+      // Write to database location
+      const dbPath = path.join(process.cwd(), 'prisma', 'dev.db');
+      fs.writeFileSync(dbPath, decompressed);
+
+      // Cleanup temp files
+      fs.rmSync(tempDir, { recursive: true, force: true });
+
+      console.log(`[MIGRATION] ✅ Database written to ${dbPath}`);
+
+      return res.json({
+        success: true,
+        message: 'Database upload complete and decompressed successfully',
+        sizeCompressed: compressedBuffer.length,
+        sizeDecompressed: decompressed.length
+      });
+    }
 
     return res.json({
       success: true,
-      message: 'Database uploaded and decompressed successfully',
-      sizeCompressed: compressedBuffer.length,
-      sizeDecompressed: decompressed.length
+      message: `Chunk ${chunkIndex + 1}/${totalChunks} received`,
+      chunkIndex
     });
   } catch (error: any) {
     console.error(`[MIGRATION] ❌ Error:`, error);
