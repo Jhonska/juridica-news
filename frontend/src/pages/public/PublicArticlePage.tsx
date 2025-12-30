@@ -16,7 +16,8 @@ import {
   Download
 } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// ✅ FIXED: Use relative API path for production compatibility
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export default function PublicArticlePage() {
   const { slug } = useParams<{ slug: string }>()
@@ -111,6 +112,27 @@ export default function PublicArticlePage() {
     // Para Instagram, copiamos el link y abrimos la app
     navigator.clipboard.writeText(window.location.href)
     window.open('https://www.instagram.com/', '_blank')
+  }
+
+  const downloadSentence = () => {
+    if (!article?.sourceDocument?.documentPath) {
+      alert('La sentencia no está disponible para descargar')
+      return
+    }
+
+    // Extraer el nombre del archivo del path
+    const fileName = article.sourceDocument.documentPath.split('/').pop()
+
+    // Crear la URL de descarga
+    const downloadUrl = `${API_URL}/storage/documents/${fileName}`
+
+    // Crear un enlace temporal y hacer click
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = fileName || 'sentencia'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const formatDate = (dateString: string): string => {
@@ -316,6 +338,18 @@ export default function PublicArticlePage() {
                   />
                 </svg>
               </button>
+
+              {/* Descargar Sentencia */}
+              {article?.sourceDocument?.documentPath && (
+                <button
+                  onClick={downloadSentence}
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+                  style={{ backgroundColor: '#04315a' }}
+                  title="Descargar sentencia original"
+                >
+                  <Download size={18} style={{ color: '#40f3f2' }} />
+                </button>
+              )}
             </div>
           </div>
         </div>

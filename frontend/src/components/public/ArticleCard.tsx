@@ -38,7 +38,10 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
 
   // Get image URL with fallback hierarchy (simplified)
   const getImageUrl = (): string => {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+    // ✅ FIXED: Use relative API path for production compatibility
+    // - Development: Works with Vite proxy
+    // - Production: Uses same domain
+    const API_URL = import.meta.env.VITE_API_URL || '/api'
 
     // Usar imageUrl que ya viene procesado desde el backend
     if (article.imageUrl) {
