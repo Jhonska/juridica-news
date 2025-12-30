@@ -31,15 +31,29 @@ import healthRoutes from '@/controllers/health';
 import seoRoutes from '@/routes/seo';
 import storageRoutes from '@/routes/storage';
 
+// ============================================
+// STARTUP INITIALIZATION
+// ============================================
+console.log('[STARTUP] Initializing server...');
+
 // Load environment variables
 config();
+console.log('[STARTUP] Environment loaded');
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-logger.info(`🚀 Starting server on port ${port}`);
-logger.info(`📊 Database URL: ${process.env.DATABASE_URL}`);
-logger.info(`🔧 Node Environment: ${process.env.NODE_ENV}`);
+console.log(`[STARTUP] Port: ${port}`);
+console.log(`[STARTUP] DATABASE_URL: ${process.env.DATABASE_URL}`);
+console.log(`[STARTUP] NODE_ENV: ${process.env.NODE_ENV}`);
+
+try {
+  logger.info(`🚀 Starting server on port ${port}`);
+  logger.info(`📊 Database URL: ${process.env.DATABASE_URL}`);
+  logger.info(`🔧 Node Environment: ${process.env.NODE_ENV}`);
+} catch (err) {
+  console.error('[STARTUP] Logger initialization failed:', err);
+}
 
 // Initialize Prisma and Redis
 let prisma: any;
@@ -290,7 +304,20 @@ server.on('error', (error: any) => {
   } else {
     logger.error(`❌ Server error:`, error);
   }
+  console.error('[ERROR] Server error:', error);
   process.exit(1);
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('[UNCAUGHT EXCEPTION] Fatal error:', error);
+  console.error(error.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION] Promise rejected:', reason);
+  console.error('Promise:', promise);
 });
 
 // Export for testing
