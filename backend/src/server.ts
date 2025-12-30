@@ -231,7 +231,9 @@ process.on('SIGTERM', async () => {
 
   // Close database connections
   await prisma.$disconnect();
-  await redis.quit();
+  if (redis) {
+    await redis.quit();
+  }
 
   process.exit(0);
 });
@@ -247,7 +249,9 @@ process.on('SIGINT', async () => {
 
   // Close database connections
   await prisma.$disconnect();
-  await redis.quit();
+  if (redis) {
+    await redis.quit();
+  }
 
   process.exit(0);
 });
