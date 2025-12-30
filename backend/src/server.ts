@@ -30,7 +30,6 @@ import { sseController } from '@/controllers/sse';
 import healthRoutes from '@/controllers/health';
 import seoRoutes from '@/routes/seo';
 import storageRoutes from '@/routes/storage';
-import migrationRoutes from '@/routes/migration';
 
 // ============================================
 // STARTUP INITIALIZATION
@@ -142,9 +141,6 @@ app.use('/api/seo', seoRoutes);
 
 // Storage routes (no auth required - public images)
 app.use('/api/storage', storageRoutes);
-
-// Migration routes (TEMPORARY - for database/storage migration)
-app.use('/api/migration', migrationRoutes);
 
 // Auth routes (no auth required for login/register)
 app.use('/api/auth', authRoutes);
