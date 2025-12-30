@@ -39,18 +39,20 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
   // Get image URL with fallback hierarchy (simplified)
   const getImageUrl = (): string => {
     // ✅ FIXED: Use relative API path for production compatibility
-    // - Development: Works with Vite proxy
-    // - Production: Uses same domain
-    const API_URL = import.meta.env.VITE_API_URL || '/api'
+    // Backend returns imageUrl as: /api/storage/images/filename.jpg
+    // Don't add /api prefix if it's already there
 
-    // Usar imageUrl que ya viene procesado desde el backend
     if (article.imageUrl) {
       // Si ya tiene el host completo, usarla tal como está
       if (article.imageUrl.startsWith('http')) {
         return article.imageUrl
       }
-      // Si es relativa, agregar el host del backend
-      return `${API_URL}${article.imageUrl}`
+      // Si ya comienza con /api/, usarla directamente (no añadir prefijo)
+      if (article.imageUrl.startsWith('/api/')) {
+        return article.imageUrl
+      }
+      // Si es otra ruta relativa, agregar /api
+      return `/api${article.imageUrl}`
     }
 
     // Fallback: Imagen por defecto basada en categoría
