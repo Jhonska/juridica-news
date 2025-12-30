@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm run install:all && cd backend && npx prisma generate && cd .. && npm run build"
+buildCommand = "npm run install:all && cd backend && npx prisma generate && cd .. && rm -rf frontend/dist backend/dist && npm run build && npm run verify:build"
 
 [deploy]
 startCommand = "npm start"

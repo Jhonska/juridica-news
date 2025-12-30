@@ -11,7 +11,7 @@
     "build:frontend": "cd frontend && npm run build",
     "build:all": "npm run build:backend && npm run build:frontend",
     "build": "npm run build:backend && npm run build:frontend && npm run copy:frontend",
-    "copy:frontend": "mkdir -p backend/dist/public && cp -r frontend/dist/* backend/dist/public/",
+    "copy:frontend": "rm -rf backend/dist/public && mkdir -p backend/dist/public && cp -r frontend/dist/* backend/dist/public/ && echo '✅ Frontend copied successfully' && echo 'Frontend files:' && ls -lh backend/dist/public/assets/*.js | head -5",
     "start": "cd backend && node dist/server.js",
     "test:backend": "cd backend && npm run test",
     "test:frontend": "cd frontend && npm run test",
@@ -20,7 +20,8 @@
     "db:generate": "cd backend && npm run db:generate",
     "db:migrate": "cd backend && npm run db:migrate",
     "db:seed": "cd backend && npm run db:seed",
-    "db:reset": "cd backend && npm run db:reset"
+    "db:reset": "cd backend && npm run db:reset",
+    "verify:build": "test -f backend/dist/public/index.html && grep -q 'index-.*\\.js' backend/dist/public/index.html && echo '✅ Build verification passed' || (echo '❌ Build verification failed!' && exit 1)"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
