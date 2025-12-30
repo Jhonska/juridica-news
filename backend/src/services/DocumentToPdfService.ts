@@ -1,6 +1,6 @@
 import { convert } from 'mammoth';
 import PDFDocument from 'pdfkit';
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
 import { logger } from '@/utils/logger';
 
@@ -9,11 +9,15 @@ export class DocumentToPdfService {
    * Convierte un documento DOCX a PDF
    */
   async convertToPdf(documentPath: string): Promise<Buffer> {
+    let fileHandle: any = null;
+
     try {
       logger.info(`🔄 Iniciando conversión a PDF: ${documentPath}`);
 
-      // Verificar que el archivo existe
-      if (!fs.existsSync(documentPath)) {
+      // Verificar que el archivo existe usando fs.promises
+      try {
+        await fs.access(documentPath);
+      } catch {
         throw new Error(`Archivo no encontrado: ${documentPath}`);
       }
 
@@ -24,8 +28,8 @@ export class DocumentToPdfService {
 
       if (ext === '.docx' || ext === '.doc') {
         logger.info('📄 Extrayendo contenido DOCX con Mammoth...');
-        const docBuffer = fs.readFileSync(documentPath);
-        const result = await convert({ arrayBuffer: docBuffer });
+        const docBuffer = await fs.readFile(documentPath);
+        const result = await convert({ arrayBuffer: docBuffer.buffer });
 
         // Convertir HTML a texto plano
         plainText = result.value
@@ -35,55 +39,103 @@ export class DocumentToPdfService {
           .replace(/&gt;/g, '>')
           .replace(/&amp;/g, '&')
           .trim();
+
+        logger.info(`📊 Contenido DOCX extraído: ${plainText.length} caracteres`);
       } else if (ext === '.rtf' || ext === '.txt') {
         logger.info('📄 Leyendo contenido de texto...');
-        plainText = fs.readFileSync(documentPath, 'utf-8').trim();
+        const buffer = await fs.readFile(documentPath);
+        plainText = buffer.toString('utf-8').trim();
+
+        logger.info(`📊 Contenido de texto leído: ${plainText.length} caracteres`);
       } else {
         throw new Error(`Formato no soportado: ${ext}`);
       }
 
+      // Validar que tenemos contenido
+      if (!plainText || plainText.length === 0) {
+        throw new Error('El documento está vacío o no contiene texto');
+      }
+
       // Crear PDF
-      logger.info('📄 Generando PDF...');
+      logger.info('📄 Generando PDF con PDFKit...');
 
       return new Promise((resolve, reject) => {
         try {
           const chunks: Buffer[] = [];
+          let errorOccurred = false;
 
           const doc = new PDFDocument({
             size: 'A4',
-            margin: 40
+            margin: 40,
+            bufferPages: true,
+            autoFirstPage: true
           });
 
           // Recopilar datos conforme se emite
-          doc.on('data', (chunk: Buffer) => {
-            chunks.push(chunk);
-          });
+          const onData = (chunk: Buffer) => {
+            try {
+              chunks.push(chunk);
+            } catch (error) {
+              logger.error('❌ Error manejando chunk de PDF:', error);
+              errorOccurred = true;
+              reject(error);
+            }
+          };
 
-          doc.on('end', () => {
-            const pdfBuffer = Buffer.concat(chunks);
-            logger.info('✅ PDF generado exitosamente');
-            resolve(pdfBuffer);
-          });
+          const onEnd = () => {
+            if (!errorOccurred) {
+              try {
+                const pdfBuffer = Buffer.concat(chunks);
+                logger.info(`✅ PDF generado exitosamente: ${pdfBuffer.length} bytes`);
+                resolve(pdfBuffer);
+              } catch (error) {
+                logger.error('❌ Error concatenando chunks:', error);
+                reject(error);
+              }
+            }
+          };
 
-          doc.on('error', (error: Error) => {
-            logger.error('❌ Error en PDFKit:', error.message);
+          const onError = (error: Error) => {
+            logger.error('❌ Error en PDFKit stream:', error.message, error.stack);
+            errorOccurred = true;
             reject(error);
-          });
+          };
 
-          // Escribir contenido en el PDF
-          doc.fontSize(14).font('Helvetica-Bold').text('SENTENCIA', { align: 'center' });
-          doc.moveDown(0.5);
+          doc.on('data', onData);
+          doc.on('end', onEnd);
+          doc.on('error', onError);
 
-          doc.fontSize(11).font('Helvetica').text(plainText, {
-            align: 'justify',
-            lineGap: 4
-          });
+          try {
+            // Escribir contenido en el PDF
+            // Usar solo 'Helvetica' que está garantizada en todos los sistemas
+            doc.fontSize(16).text('SENTENCIA', { align: 'center', underline: false });
+            doc.moveDown(0.5);
 
-          // Finalizar el documento
-          doc.end();
+            // Dividir texto en párrafos para mejor manejo
+            const paragraphs = plainText.split(/\n\n+/);
+
+            for (const paragraph of paragraphs) {
+              if (paragraph.trim().length > 0) {
+                doc.fontSize(11).text(paragraph.trim(), {
+                  align: 'left',
+                  lineGap: 4,
+                  width: doc.page.width - 80 // Account for margins
+                });
+                doc.moveDown(0.3);
+              }
+            }
+
+            // Finalizar el documento
+            doc.end();
+
+          } catch (error) {
+            logger.error('❌ Error escribiendo contenido en PDF:', error);
+            errorOccurred = true;
+            reject(error);
+          }
 
         } catch (error) {
-          logger.error('❌ Error creando PDF:', error);
+          logger.error('❌ Error inicializando PDFDocument:', error);
           reject(error);
         }
       });
@@ -91,7 +143,8 @@ export class DocumentToPdfService {
     } catch (error) {
       logger.error('❌ Error en conversión a PDF:', {
         documentPath,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
     }
