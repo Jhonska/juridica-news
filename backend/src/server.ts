@@ -37,10 +37,21 @@ config();
 const app = express();
 const port = process.env.PORT || 3001;
 
+logger.info(`🚀 Starting server on port ${port}`);
+logger.info(`📊 Database URL: ${process.env.DATABASE_URL}`);
+logger.info(`🔧 Node Environment: ${process.env.NODE_ENV}`);
+
 // Initialize Prisma and Redis
-const prisma = new PrismaClient({
-  log: ['query', 'info', 'warn', 'error'],
-});
+let prisma: any;
+try {
+  prisma = new PrismaClient({
+    log: ['query', 'info', 'warn', 'error'],
+  });
+  logger.info('✅ Prisma client initialized');
+} catch (error) {
+  logger.error('❌ Failed to initialize Prisma:', error);
+  throw error;
+}
 
 // Initialize Redis only if REDIS_URL is provided
 let redis: any = null;
@@ -257,13 +268,29 @@ process.on('SIGINT', async () => {
 });
 
 // Start server
-const server = app.listen(port, () => {
-  logger.info(`🚀 Editorial Jurídico API running on port ${port}`);
+logger.info(`⏳ Attempting to start server on port ${port}...`);
+
+const server = app.listen(port, '0.0.0.0', () => {
+  logger.info(`✅ Editorial Jurídico API RUNNING on port ${port}`);
   logger.info(`📚 API Documentation: http://localhost:${port}/api-docs`);
   logger.info(`🔍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
   // ✅ Start scheduled tasks
-  scheduledTasksService.start();
+  try {
+    scheduledTasksService.start();
+    logger.info(`✅ Scheduled tasks started`);
+  } catch (error) {
+    logger.warn('⚠️ Scheduled tasks failed to start (continuing):', error);
+  }
+});
+
+server.on('error', (error: any) => {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`❌ Port ${port} is already in use`);
+  } else {
+    logger.error(`❌ Server error:`, error);
+  }
+  process.exit(1);
 });
 
 // Export for testing
