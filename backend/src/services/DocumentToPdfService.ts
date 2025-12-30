@@ -1,5 +1,5 @@
 import { convert } from 'mammoth';
-import puppeteer from 'puppeteer';
+import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '@/utils/logger';
@@ -12,239 +12,153 @@ export class DocumentToPdfService {
    * @returns Buffer del PDF generado
    */
   async convertDocxToPdf(documentPath: string, outputPath?: string): Promise<Buffer> {
-    try {
-      logger.info(`🔄 Iniciando conversión de DOCX a PDF: ${documentPath}`);
-
-      // 1. Leer el archivo DOCX
-      if (!fs.existsSync(documentPath)) {
-        throw new Error(`Archivo no encontrado: ${documentPath}`);
-      }
-
-      // 2. Convertir DOCX a HTML usando Mammoth
-      logger.info('📄 Extrayendo contenido con Mammoth...');
-      const docBuffer = fs.readFileSync(documentPath);
-      const result = await convert({ arrayBuffer: docBuffer });
-      
-      const htmlContent = result.value;
-      logger.info('✅ Contenido extraído exitosamente');
-
-      // 3. Crear HTML completo con estilos
-      const styledHtml = `
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Sentencia</title>
-          <style>
-            body {
-              font-family: 'Calibri', 'Arial', sans-serif;
-              line-height: 1.6;
-              color: #333;
-              margin: 40px;
-              background: white;
-            }
-            p {
-              text-align: justify;
-              margin-bottom: 12px;
-              font-size: 12pt;
-            }
-            h1, h2, h3, h4, h5, h6 {
-              margin-top: 16px;
-              margin-bottom: 12px;
-              font-weight: bold;
-            }
-            h1 { font-size: 18pt; }
-            h2 { font-size: 14pt; }
-            h3 { font-size: 13pt; }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 12px 0;
-            }
-            th, td {
-              border: 1px solid #999;
-              padding: 8px;
-              text-align: left;
-            }
-            th {
-              background-color: #f0f0f0;
-              font-weight: bold;
-            }
-            .page-break {
-              page-break-after: always;
-            }
-            strong {
-              font-weight: bold;
-            }
-            em {
-              font-style: italic;
-            }
-            u {
-              text-decoration: underline;
-            }
-            @page {
-              margin: 20mm;
-              size: A4;
-            }
-            @media print {
-              body {
-                margin: 0;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          ${htmlContent}
-        </body>
-        </html>
-      `;
-
-      // 4. Convertir HTML a PDF usando Puppeteer
-      logger.info('🌐 Iniciando navegador para convertir a PDF...');
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-
+    return new Promise(async (resolve, reject) => {
       try {
-        const page = await browser.newPage();
-        
-        // Establecer contenido HTML
-        await page.setContent(styledHtml, {
-          waitUntil: 'networkidle0'
-        });
+        logger.info(`🔄 Iniciando conversión de DOCX a PDF: ${documentPath}`);
 
-        // Generar PDF
-        logger.info('📄 Generando PDF...');
-        const pdfBuffer = await page.pdf({
-          format: 'A4',
-          margin: {
-            top: '20mm',
-            right: '20mm',
-            bottom: '20mm',
-            left: '20mm'
-          },
-          printBackground: true,
-          scale: 1
-        });
-
-        await page.close();
-        logger.info('✅ PDF generado exitosamente');
-
-        // 5. Guardar si se proporciona ruta de salida
-        if (outputPath) {
-          const outputDir = path.dirname(outputPath);
-          if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-          }
-          fs.writeFileSync(outputPath, pdfBuffer);
-          logger.info(`💾 PDF guardado en: ${outputPath}`);
+        // 1. Verificar que el archivo existe
+        if (!fs.existsSync(documentPath)) {
+          throw new Error(`Archivo no encontrado: ${documentPath}`);
         }
 
-        return pdfBuffer;
-      } finally {
-        await browser.close();
+        // 2. Convertir DOCX a HTML usando Mammoth
+        logger.info('📄 Extrayendo contenido con Mammoth...');
+        const docBuffer = fs.readFileSync(documentPath);
+        const result = await convert({ arrayBuffer: docBuffer });
+
+        const htmlContent = result.value;
+        logger.info('✅ Contenido extraído exitosamente');
+
+        // 3. Crear PDF usando PDFKit
+        logger.info('📄 Generando PDF con PDFKit...');
+
+        const pdfDoc = new PDFDocument({
+          size: 'A4',
+          margin: 40,
+          font: 'Helvetica'
+        });
+
+        const chunks: Buffer[] = [];
+        pdfDoc.on('data', (chunk) => chunks.push(chunk));
+
+        pdfDoc.on('end', async () => {
+          const pdfBuffer = Buffer.concat(chunks);
+
+          // 4. Guardar si se proporciona ruta de salida
+          if (outputPath) {
+            const outputDir = path.dirname(outputPath);
+            if (!fs.existsSync(outputDir)) {
+              fs.mkdirSync(outputDir, { recursive: true });
+            }
+            fs.writeFileSync(outputPath, pdfBuffer);
+            logger.info(`💾 PDF guardado en: ${outputPath}`);
+          }
+
+          logger.info('✅ PDF generado exitosamente');
+          resolve(pdfBuffer);
+        });
+
+        pdfDoc.on('error', (error) => {
+          logger.error('❌ Error generando PDF:', error);
+          reject(error);
+        });
+
+        // Convertir HTML a texto plano (PDFKit no soporta HTML directamente)
+        // Remover tags HTML
+        const plainText = htmlContent
+          .replace(/<[^>]*>/g, '') // Remover tags HTML
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .trim();
+
+        // Agregar título y contenido al PDF
+        pdfDoc.fontSize(14).font('Helvetica-Bold').text('SENTENCIA', { align: 'center' });
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(11).font('Helvetica').text(plainText, {
+          align: 'justify',
+          width: 500
+        });
+
+        pdfDoc.end();
+
+      } catch (error) {
+        logger.error('❌ Error en conversión de documento a PDF:', {
+          documentPath,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        reject(error);
       }
-    } catch (error) {
-      logger.error('❌ Error en conversión de documento a PDF:', {
-        documentPath,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw error;
-    }
+    });
   }
 
   /**
-   * Convierte un archivo RTF/TXT a PDF
-   * (Similar a DOCX pero requiere procesamiento diferente)
+   * Convierte un archivo de texto a PDF
    */
   async convertTextToPdf(filePath: string, outputPath?: string): Promise<Buffer> {
-    try {
-      logger.info(`🔄 Iniciando conversión de texto a PDF: ${filePath}`);
-
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`Archivo no encontrado: ${filePath}`);
-      }
-
-      // Leer contenido del archivo
-      let textContent = fs.readFileSync(filePath, 'utf-8');
-
-      // Crear HTML desde el texto
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Sentencia</title>
-          <style>
-            body {
-              font-family: 'Calibri', 'Arial', monospace;
-              line-height: 1.5;
-              color: #333;
-              margin: 40px;
-              background: white;
-              white-space: pre-wrap;
-              word-wrap: break-word;
-            }
-            @page {
-              margin: 20mm;
-              size: A4;
-            }
-          </style>
-        </head>
-        <body>
-          ${textContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-        </body>
-        </html>
-      `;
-
-      // Convertir a PDF
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-
+    return new Promise(async (resolve, reject) => {
       try {
-        const page = await browser.newPage();
-        await page.setContent(htmlContent, {
-          waitUntil: 'networkidle0'
-        });
+        logger.info(`🔄 Iniciando conversión de texto a PDF: ${filePath}`);
 
-        const pdfBuffer = await page.pdf({
-          format: 'A4',
-          margin: {
-            top: '20mm',
-            right: '20mm',
-            bottom: '20mm',
-            left: '20mm'
-          }
-        });
-
-        await page.close();
-
-        if (outputPath) {
-          const outputDir = path.dirname(outputPath);
-          if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-          }
-          fs.writeFileSync(outputPath, pdfBuffer);
-          logger.info(`💾 PDF guardado en: ${outputPath}`);
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`Archivo no encontrado: ${filePath}`);
         }
 
-        logger.info('✅ PDF generado exitosamente desde texto');
-        return pdfBuffer;
-      } finally {
-        await browser.close();
+        // Leer contenido del archivo
+        const textContent = fs.readFileSync(filePath, 'utf-8');
+
+        // Crear PDF
+        const pdfDoc = new PDFDocument({
+          size: 'A4',
+          margin: 40,
+          font: 'Helvetica'
+        });
+
+        const chunks: Buffer[] = [];
+        pdfDoc.on('data', (chunk) => chunks.push(chunk));
+
+        pdfDoc.on('end', () => {
+          const pdfBuffer = Buffer.concat(chunks);
+
+          if (outputPath) {
+            const outputDir = path.dirname(outputPath);
+            if (!fs.existsSync(outputDir)) {
+              fs.mkdirSync(outputDir, { recursive: true });
+            }
+            fs.writeFileSync(outputPath, pdfBuffer);
+            logger.info(`💾 PDF guardado en: ${outputPath}`);
+          }
+
+          logger.info('✅ PDF generado exitosamente desde texto');
+          resolve(pdfBuffer);
+        });
+
+        pdfDoc.on('error', (error) => {
+          logger.error('❌ Error generando PDF:', error);
+          reject(error);
+        });
+
+        // Agregar contenido al PDF
+        pdfDoc.fontSize(14).font('Helvetica-Bold').text('SENTENCIA', { align: 'center' });
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(11).font('Helvetica').text(textContent, {
+          align: 'justify',
+          width: 500
+        });
+
+        pdfDoc.end();
+
+      } catch (error) {
+        logger.error('❌ Error en conversión de texto a PDF:', {
+          filePath,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        reject(error);
       }
-    } catch (error) {
-      logger.error('❌ Error en conversión de texto a PDF:', {
-        filePath,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -255,7 +169,7 @@ export class DocumentToPdfService {
   async convertToPdf(documentPath: string, outputPath?: string): Promise<Buffer> {
     const ext = path.extname(documentPath).toLowerCase();
 
-    if (ext === '.docx') {
+    if (ext === '.docx' || ext === '.doc') {
       return this.convertDocxToPdf(documentPath, outputPath);
     } else if (ext === '.rtf' || ext === '.txt') {
       return this.convertTextToPdf(documentPath, outputPath);
