@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// ✅ FIXED: Use relative API path for production compatibility
+// - Development: Will work with Vite proxy (http://localhost:3001 via vite.config.ts)
+// - Production: Will use the same domain as frontend (https://domain.com/api)
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 // Tipo base para artículos con imágenes
 interface BasePortalArticle {
@@ -87,13 +90,15 @@ export const publicPortalService = {
    */
   async getPortalSections(): Promise<PortalSections> {
     try {
-      const response = await axios.get(`${API_URL}/api/public/portal-sections`)
+      const response = await axios.get(`${API_URL}/public/portal-sections`)
       return response.data.data
     } catch (error) {
       console.error('Error fetching portal sections:', error)
       // Fallback a datos vacíos en caso de error
       return {
-        general: [],
+        generalTop: [],
+        generalMiddle: [],
+        generalBottom: [],
         ultimasNoticias: [],
         entidades: {},
         destacados: []
@@ -111,7 +116,7 @@ export const publicPortalService = {
   ): Promise<ArticlesByArea> {
     try {
       const response = await axios.get(
-        `${API_URL}/api/public/articles/by-legal-area/${legalArea}`,
+        `${API_URL}/public/articles/by-legal-area/${legalArea}`,
         {
           params: { page, limit }
         }
@@ -138,7 +143,7 @@ export const publicPortalService = {
    */
   async getArticleBySlug(slug: string) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/articles/${slug}`)
+      const response = await axios.get(`${API_URL}/public/articles/${slug}`)
       return response.data.data
     } catch (error) {
       console.error(`Error fetching article ${slug}:`, error)
