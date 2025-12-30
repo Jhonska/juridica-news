@@ -120,16 +120,22 @@ export default function PublicArticlePage() {
       return
     }
 
-    // Extraer el nombre del archivo del path
+    // ✅ FIXED: Extraer el nombre del archivo del path
     const fileName = article.sourceDocument.documentPath.split('/').pop()
+    if (!fileName) {
+      alert('Error al procesar el nombre del archivo')
+      return
+    }
 
-    // Crear la URL de descarga
-    const downloadUrl = `${API_URL}/storage/documents/${fileName}`
+    // ✅ FIXED: Usar endpoint de conversión a PDF en lugar del archivo original
+    // Esto convierte automáticamente DOCX/RTF a PDF
+    const downloadUrl = `${API_URL}/storage/documents/${fileName}/pdf`
 
     // Crear un enlace temporal y hacer click
     const link = document.createElement('a')
     link.href = downloadUrl
-    link.download = fileName || 'sentencia'
+    // El nombre del PDF se genera automáticamente en el servidor
+    link.download = fileName.replace(/\.[^/.]+$/, '.pdf') || 'sentencia.pdf'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

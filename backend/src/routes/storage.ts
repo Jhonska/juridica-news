@@ -7,6 +7,7 @@ import { logger } from '@/utils/logger';
 import { imageTagService, ImageTag } from '@/services/ImageTagService';
 import { validateRequest } from '@/middleware/validation';
 import { cleanOrphanImages, checkImageStatus } from '@/utils/cleanOrphanImages';
+import { documentToPdfService } from '@/services/DocumentToPdfService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1372,6 +1373,109 @@ router.get('/documents/:filename/text', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Error al procesar el documento'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/storage/documents/{filename}/pdf:
+ *   get:
+ *     summary: Descarga un documento convertido a PDF
+ *     tags: [Storage]
+ *     parameters:
+ *       - in: path
+ *         name: filename
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Nombre del archivo (ej. C-383-25.docx)
+ *     responses:
+ *       200:
+ *         description: PDF generado exitosamente
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: Documento no encontrado
+ *       500:
+ *         description: Error al convertir el documento
+ */
+router.get('/documents/:filename/pdf', async (req: Request, res: Response) => {
+  try {
+    const { filename } = req.params;
+
+    // ✅ FIXED: Validar que el filename no tenga path traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nombre de archivo inválido'
+      });
+    }
+
+    // Construir ruta al documento
+    const documentsDir = path.join(__dirname, '../../storage/documents');
+    const filePath = path.join(documentsDir, filename);
+
+    // Verificar que el archivo existe
+    try {
+      await fs.access(filePath);
+    } catch {
+      logger.warn('Documento no encontrado', { filename, filePath });
+      return res.status(404).json({
+        success: false,
+        error: 'Documento no encontrado'
+      });
+    }
+
+    // Validar extensión
+    const ext = path.extname(filename).toLowerCase();
+    if (!['.docx', '.doc', '.rtf', '.txt'].includes(ext)) {
+      return res.status(400).json({
+        success: false,
+        error: `Formato no soportado: ${ext}. Solo se soportan .docx, .doc, .rtf y .txt`
+      });
+    }
+
+    logger.info('📄 Iniciando conversión a PDF', {
+      filename,
+      ext,
+      filePath
+    });
+
+    // Convertir documento a PDF
+    const pdfBuffer = await documentToPdfService.convertToPdf(filePath);
+
+    // Generar nombre para el PDF
+    const pdfFilename = filename.replace(/\.[^/.]+$/, '.pdf');
+
+    // Enviar el PDF
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${pdfFilename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Cache-Control', 'no-store');
+
+    res.send(pdfBuffer);
+
+    logger.info('✅ PDF descargado exitosamente', {
+      originalFilename: filename,
+      pdfFilename,
+      pdfSize: pdfBuffer.length
+    });
+
+  } catch (error) {
+    logger.error('❌ Error convirtiendo documento a PDF:', {
+      filename: req.params.filename,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
+    // Enviar error genérico al cliente
+    res.status(500).json({
+      success: false,
+      error: 'Error al convertir el documento a PDF'
     });
   }
 });
