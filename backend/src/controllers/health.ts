@@ -5,7 +5,15 @@ import { logger } from '@/utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+
+// Initialize Redis only if REDIS_URL is provided
+let redis: any = null;
+if (process.env.REDIS_URL) {
+  redis = new Redis(process.env.REDIS_URL);
+  redis.on('error', (err: any) => {
+    logger.warn('Redis connection error in health check', { error: err.message });
+  });
+}
 
 interface HealthStatus {
   status: 'ok' | 'degraded' | 'down';
@@ -56,13 +64,17 @@ router.get('/', async (req: Request, res: Response) => {
     logger.error('Database health check failed', { error });
   }
 
-  // Check Redis connection
-  try {
-    await redis.ping();
-  } catch (error) {
-    health.services.redis = 'error';
-    health.status = 'degraded';
-    logger.error('Redis health check failed', { error });
+  // Check Redis connection (only if configured)
+  if (redis) {
+    try {
+      await redis.ping();
+    } catch (error) {
+      health.services.redis = 'error';
+      health.status = 'degraded';
+      logger.error('Redis health check failed', { error });
+    }
+  } else {
+    health.services.redis = 'unavailable';
   }
 
   // Check Elasticsearch (if configured)

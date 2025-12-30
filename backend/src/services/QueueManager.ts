@@ -18,19 +18,25 @@ interface QueueJobData {
 }
 
 export class QueueManager {
-  private redis: Redis;
+  private redis: Redis | null;
   private queues: Map<string, Queue> = new Map();
   private workers: Map<string, Worker> = new Map();
   private queueEvents: Map<string, QueueEvents> = new Map();
   private orchestrator: ScrapingOrchestrator;
   private isInitialized = false;
+  private redisAvailable = false;
 
   constructor(orchestrator: ScrapingOrchestrator, redisUrl?: string) {
     this.orchestrator = orchestrator;
-    this.redis = new Redis(redisUrl || process.env.REDIS_URL || 'redis://localhost:6379');
-    
-    // Configurar manejadores de eventos de Redis
-    this.setupRedisEventHandlers();
+
+    const redisUrl_ = redisUrl || process.env.REDIS_URL;
+    if (redisUrl_) {
+      this.redis = new Redis(redisUrl_);
+      this.setupRedisEventHandlers();
+    } else {
+      this.redis = null;
+      logger.warn('⚠️ Redis not configured (REDIS_URL not set) - Queue system disabled');
+    }
   }
 
   /**
@@ -39,6 +45,13 @@ export class QueueManager {
   async initialize(sources: string[]): Promise<void> {
     if (this.isInitialized) {
       logger.warn('⚠️ QueueManager ya está inicializado');
+      return;
+    }
+
+    // Si Redis no está disponible, simplemente marcar como inicializado y retornar
+    if (!this.redis) {
+      logger.warn('⚠️ Redis no está disponible - Queue system disabled');
+      this.isInitialized = true;
       return;
     }
 
@@ -57,7 +70,8 @@ export class QueueManager {
 
     } catch (error) {
       logger.error('❌ Error inicializando QueueManager:', error);
-      throw error;
+      // No throw - solo log, permite que la app continúe sin colas
+      this.isInitialized = true;
     }
   }
 

@@ -42,7 +42,16 @@ const prisma = new PrismaClient({
   log: ['query', 'info', 'warn', 'error'],
 });
 
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+// Initialize Redis only if REDIS_URL is provided
+let redis: any = null;
+if (process.env.REDIS_URL) {
+  redis = new Redis(process.env.REDIS_URL);
+  redis.on('error', (err: any) => {
+    logger.warn('Redis connection error (continuing without Redis)', { error: err.message });
+  });
+} else {
+  logger.info('Redis not configured (REDIS_URL not set) - continuing without Redis');
+}
 
 // Rate limiting - Very permissive for development
 const limiter = rateLimit({
