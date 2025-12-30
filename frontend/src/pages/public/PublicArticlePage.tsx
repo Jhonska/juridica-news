@@ -16,8 +16,9 @@ import {
   Download
 } from 'lucide-react'
 
-// ✅ FIXED: Use relative API path for production compatibility
-const API_URL = import.meta.env.VITE_API_URL || '/api'
+// ✅ FIXED: Use relative API path WITHOUT double /api
+// In production (Railway), frontend and backend are on same domain
+const API_URL = ''  // Empty string = use relative paths
 
 export default function PublicArticlePage() {
   const { slug } = useParams<{ slug: string }>()
@@ -114,31 +115,70 @@ export default function PublicArticlePage() {
     window.open('https://www.instagram.com/', '_blank')
   }
 
-  const downloadSentence = () => {
-    if (!article?.sourceDocument?.documentPath) {
-      alert('La sentencia no está disponible para descargar')
-      return
+  const downloadSentence = async () => {
+    try {
+      if (!article?.sourceDocument?.documentPath) {
+        alert('La sentencia no está disponible para descargar')
+        return
+      }
+
+      // ✅ FIXED: Extraer el nombre del archivo del path
+      const fileName = article.sourceDocument.documentPath.split('/').pop()
+      if (!fileName) {
+        alert('Error al procesar el nombre del archivo')
+        return
+      }
+
+      // ✅ FIXED: Construir URL correcta al endpoint PDF
+      // Use /api/storage/documents/{filename}/pdf
+      const downloadUrl = `/api/storage/documents/${fileName}/pdf`
+
+      console.log('📥 Descargando PDF desde:', downloadUrl)
+
+      // ✅ FIXED: Usar fetch() para obtener el PDF con mejor control
+      const response = await fetch(downloadUrl)
+
+      if (!response.ok) {
+        console.error('❌ Error en descarga:', response.status, response.statusText)
+        alert(`Error al descargar: ${response.status} ${response.statusText}`)
+        return
+      }
+
+      // Verificar que se recibió PDF
+      const contentType = response.headers.get('content-type')
+      console.log('📄 Content-Type recibido:', contentType)
+
+      if (!contentType?.includes('pdf') && !contentType?.includes('octet-stream')) {
+        console.warn('⚠️ Content-Type no es PDF:', contentType)
+      }
+
+      // Obtener el blob del PDF
+      const blob = await response.blob()
+      console.log('📦 Tamaño de PDF descargado:', blob.size, 'bytes')
+
+      // Generar nombre del PDF
+      const pdfFileName = fileName.replace(/\.[^/.]+$/, '.pdf') || 'sentencia.pdf'
+
+      // Crear URL de descarga desde el blob
+      const blobUrl = URL.createObjectURL(blob)
+
+      // Crear enlace temporal y descargar
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = pdfFileName
+      document.body.appendChild(link)
+      link.click()
+
+      // Limpiar recursos
+      document.body.removeChild(link)
+      URL.revokeObjectURL(blobUrl)
+
+      console.log('✅ PDF descargado exitosamente:', pdfFileName)
+
+    } catch (error) {
+      console.error('❌ Error descargando sentencia:', error)
+      alert('Error al descargar la sentencia. Por favor, intenta nuevamente.')
     }
-
-    // ✅ FIXED: Extraer el nombre del archivo del path
-    const fileName = article.sourceDocument.documentPath.split('/').pop()
-    if (!fileName) {
-      alert('Error al procesar el nombre del archivo')
-      return
-    }
-
-    // ✅ FIXED: Usar endpoint de conversión a PDF en lugar del archivo original
-    // Esto convierte automáticamente DOCX/RTF a PDF
-    const downloadUrl = `${API_URL}/storage/documents/${fileName}/pdf`
-
-    // Crear un enlace temporal y hacer click
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    // El nombre del PDF se genera automáticamente en el servidor
-    link.download = fileName.replace(/\.[^/.]+$/, '.pdf') || 'sentencia.pdf'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
   }
 
   const formatDate = (dateString: string): string => {
