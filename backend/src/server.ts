@@ -43,6 +43,9 @@ console.log('[STARTUP] Environment loaded');
 const app = express();
 const port = process.env.PORT || 3001;
 
+// Trust proxy for Railway/Vercel/Heroku (to properly handle X-Forwarded-For)
+app.set('trust proxy', 1);
+
 console.log(`[STARTUP] Port: ${port}`);
 console.log(`[STARTUP] DATABASE_URL: ${process.env.DATABASE_URL}`);
 console.log(`[STARTUP] NODE_ENV: ${process.env.NODE_ENV}`);
