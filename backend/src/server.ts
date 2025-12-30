@@ -97,6 +97,17 @@ const limiter = rateLimit({
   }
 });
 
+// ✅ FIXED: Separate rate limiter for static assets (images, documents)
+// Static content should have NO rate limiting to avoid blocking image loads
+const staticAssetLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100000'), // Much higher for static files
+  skip: (req) => {
+    // Always skip rate limiting for static assets
+    return req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1' || true;
+  }
+});
+
 // Middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -128,6 +139,12 @@ app.use(morgan('combined', {
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(requestLogger);
+
+// ✅ FIXED: Apply storage routes with static asset limiter BEFORE general limiter
+// This prevents rate limiting from blocking image loads
+app.use('/api/storage', staticAssetLimiter, storageRoutes);
+
+// Apply general rate limiter to all other routes
 app.use(limiter);
 
 // Swagger documentation
@@ -141,9 +158,6 @@ app.use('/api/public', publicRoutes);
 
 // SEO routes (no auth required)
 app.use('/api/seo', seoRoutes);
-
-// Storage routes (no auth required - public images)
-app.use('/api/storage', storageRoutes);
 
 // Auth routes (no auth required for login/register)
 app.use('/api/auth', authRoutes);

@@ -11,7 +11,6 @@ import ArticleRouter from '@/pages/articles/ArticleRouter'
 import ArticleEditorPage from '@/pages/articles/ArticleEditorPage'
 import PublicPortalPage from '@/pages/public/PublicPortalPage'
 import PublicArticlePage from '@/pages/public/PublicArticlePage'
-import RedirectPage from '@/pages/RedirectPage'
 
 // Section Pages
 import AdministrativoPage from '@/pages/public/AdministrativoPage'
@@ -32,8 +31,8 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Routes>
-        {/* Root route - Smart redirect based on auth status */}
-        <Route path="/" element={<RedirectPage />} />
+        {/* Root route - Show public portal by default */}
+        <Route path="/" element={<PublicPortalPage />} />
 
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
